@@ -71,6 +71,8 @@ sbt ~client/fastLinkJS
 
 ## Benchmark Suite
 
+![Benchmark Results](img.png)
+
 The benchmark compares performance across:
 
 - **Fibonacci** (recursive and iterative implementations)
