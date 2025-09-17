@@ -1,0 +1,303 @@
+@()
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scala.js vs WebAssembly Benchmark</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            margin: 40px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .benchmark-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .benchmark-section h2 {
+            margin-top: 0;
+            color: #555;
+        }
+        #comparison {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f0f0f0;
+            font-weight: bold;
+        }
+        .faster {
+            color: green;
+            font-weight: bold;
+        }
+        .slower {
+            color: red;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        pre {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .status {
+            padding: 10px;
+            background: #fffbcc;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Scala.js vs WebAssembly Performance Benchmark</h1>
+
+    <div class="status" id="status">Click "Run Benchmarks" to start the performance tests</div>
+
+    <button onclick="runBothBenchmarks()">Run Benchmarks</button>
+    <button onclick="clearResults()">Clear Results</button>
+
+    <div class="container">
+        <div class="benchmark-section">
+            <h2>Pure Scala.js</h2>
+            <div id="benchmark-results">Not run yet</div>
+        </div>
+
+        <div class="benchmark-section">
+            <h2>WebAssembly (WASM)</h2>
+            <div id="benchmark-results-wasm">Not run yet</div>
+        </div>
+    </div>
+
+    <div id="comparison">
+        <h2>Performance Comparison</h2>
+        <div id="comparison-table">Run benchmarks to see comparison</div>
+    </div>
+
+    <script type="module">
+        window.jsBenchmarkComplete = false;
+        window.wasmBenchmarkComplete = false;
+        window.benchmarkStartTime = null;
+
+        function updateStatus(message, isError = false) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.style.background = isError ? '#ffcccc' : '#fffbcc';
+            console.log(`[Benchmark] ${message}`);
+        }
+
+        function showProgress(target, message) {
+            const el = document.getElementById(target);
+            if (el) {
+                el.innerHTML = `<div style="color: #666;">${message}</div>`;
+            }
+        }
+
+        document.addEventListener('js-benchmark-complete', (e) => {
+            console.log('[Benchmark] JS benchmark complete:', e.detail);
+            window.jsBenchmarkComplete = true;
+            window.jsResults = e.detail;
+            updateStatus('JavaScript benchmark complete, waiting for WebAssembly...');
+            checkAndCompare();
+        });
+
+        document.addEventListener('wasm-benchmark-complete', (e) => {
+            console.log('[Benchmark] WASM benchmark complete:', e.detail);
+            window.wasmBenchmarkComplete = true;
+            window.wasmResults = e.detail;
+            updateStatus('WebAssembly benchmark complete!');
+            checkAndCompare();
+        });
+
+        window.runBothBenchmarks = async function() {
+            console.log('[Benchmark] Starting benchmarks...');
+            window.benchmarkStartTime = Date.now();
+            updateStatus('Step 1/4: Clearing previous results...');
+
+            // Clear any existing scripts
+            const existingScripts = document.querySelectorAll('script[data-benchmark]');
+            existingScripts.forEach(s => s.remove());
+
+            window.jsBenchmarkComplete = false;
+            window.wasmBenchmarkComplete = false;
+            window.jsResults = null;
+            window.wasmResults = null;
+
+            showProgress('benchmark-results', 'Loading JavaScript version...');
+            showProgress('benchmark-results-wasm', 'Waiting to start...');
+
+            updateStatus('Step 2/4: Loading JavaScript benchmark module...');
+
+            // Load JS version
+            const jsScript = document.createElement('script');
+            jsScript.type = 'module';
+            jsScript.src = '/assets/benchmarkjs-fastopt/main.js';
+            jsScript.dataset.benchmark = 'js';
+
+            jsScript.onload = () => {
+                console.log('[Benchmark] JS module loaded successfully');
+                showProgress('benchmark-results', 'Running JavaScript benchmarks... (this may take 10-30 seconds)');
+            };
+
+            jsScript.onerror = (e) => {
+                console.error('[Benchmark] Failed to load JS module:', e);
+                updateStatus('Error: Failed to load JavaScript benchmark module', true);
+                showProgress('benchmark-results', 'Error loading module');
+            };
+
+            document.body.appendChild(jsScript);
+
+            // Wait a bit then load WASM version
+            setTimeout(() => {
+                updateStatus('Step 3/4: Loading WebAssembly benchmark module...');
+                showProgress('benchmark-results-wasm', 'Loading WebAssembly version...');
+
+                const wasmScript = document.createElement('script');
+                wasmScript.type = 'module';
+                wasmScript.src = '/assets/benchmarkwasm-fastopt/main.js';
+                wasmScript.dataset.benchmark = 'wasm';
+
+                wasmScript.onload = () => {
+                    console.log('[Benchmark] WASM module loaded successfully');
+                    showProgress('benchmark-results-wasm', 'Running WebAssembly benchmarks... (this may take 10-30 seconds)');
+                };
+
+                wasmScript.onerror = (e) => {
+                    console.error('[Benchmark] Failed to load WASM module:', e);
+                    updateStatus('Error: Failed to load WebAssembly benchmark module', true);
+                    showProgress('benchmark-results-wasm', 'Error loading module');
+                };
+
+                document.body.appendChild(wasmScript);
+            }, 2000);
+
+            // Add timeout warning
+            setTimeout(() => {
+                if (!window.jsBenchmarkComplete && !window.wasmBenchmarkComplete) {
+                    updateStatus('Still running... Heavy computations in progress. This is normal for first run.');
+                }
+            }, 5000);
+
+            // Add timeout error
+            setTimeout(() => {
+                if (!window.jsBenchmarkComplete || !window.wasmBenchmarkComplete) {
+                    const missing = [];
+                    if (!window.jsBenchmarkComplete) missing.push('JavaScript');
+                    if (!window.wasmBenchmarkComplete) missing.push('WebAssembly');
+                    updateStatus(`Warning: ${missing.join(' and ')} benchmark(s) taking unusually long. Check console for errors.`, true);
+                }
+            }, 60000);
+        }
+
+        window.checkAndCompare = function() {
+            if (window.jsBenchmarkComplete && window.wasmBenchmarkComplete) {
+                const elapsed = ((Date.now() - window.benchmarkStartTime) / 1000).toFixed(1);
+                updateStatus(`Step 4/4: Benchmarks complete in ${elapsed} seconds! See comparison below.`);
+                document.getElementById('status').style.background = '#ccffcc';
+                compareResults();
+            }
+        }
+
+        window.compareResults = function() {
+            if (!window.jsResults || !window.wasmResults) return;
+
+            const comparisonDiv = document.getElementById('comparison-table');
+            let html = '<table><thead><tr><th>Benchmark</th><th>Pure JS (ms)</th><th>WASM (ms)</th><th>Difference</th><th>Winner</th></tr></thead><tbody>';
+
+            const benchmarks = [
+                { key: 'fibonacci_recursive_35', name: 'Fibonacci Recursive (n=35)' },
+                { key: 'fibonacci_iterative_10000', name: 'Fibonacci Iterative (n=10000)' },
+                { key: 'count_primes_10000', name: 'Count Primes (up to 10000)' },
+                { key: 'matrix_multiply_100', name: 'Matrix Multiply (100x100)' },
+                { key: 'quicksort_10000', name: 'QuickSort (10000 elements)' },
+                { key: 'string_manipulation_1000', name: 'String Manipulation (1000 iterations)' },
+                { key: 'collection_operations_1000', name: 'Collection Operations (1000 items)' }
+            ];
+
+            let totalJsTime = 0;
+            let totalWasmTime = 0;
+
+            for (const bench of benchmarks) {
+                const jsTime = window.jsResults[bench.key] || 0;
+                const wasmTime = window.wasmResults[bench.key] || 0;
+                totalJsTime += jsTime;
+                totalWasmTime += wasmTime;
+
+                const diff = ((jsTime - wasmTime) / jsTime * 100).toFixed(1);
+                const winner = jsTime < wasmTime ? 'JS' : 'WASM';
+                const speedup = jsTime < wasmTime ?
+                    (wasmTime / jsTime).toFixed(2) + 'x slower' :
+                    (jsTime / wasmTime).toFixed(2) + 'x faster';
+
+                html += `<tr>
+                    <td>${bench.name}</td>
+                    <td class="${jsTime < wasmTime ? 'faster' : 'slower'}">${jsTime.toFixed(2)}</td>
+                    <td class="${wasmTime < jsTime ? 'faster' : 'slower'}">${wasmTime.toFixed(2)}</td>
+                    <td>${diff > 0 ? '+' : ''}${diff}%</td>
+                    <td>${winner} (${speedup})</td>
+                </tr>`;
+            }
+
+            // Add total row
+            const totalDiff = ((totalJsTime - totalWasmTime) / totalJsTime * 100).toFixed(1);
+            const totalWinner = totalJsTime < totalWasmTime ? 'JS' : 'WASM';
+            const totalSpeedup = totalJsTime < totalWasmTime ?
+                (totalWasmTime / totalJsTime).toFixed(2) :
+                (totalJsTime / totalWasmTime).toFixed(2);
+
+            html += `<tr style="font-weight: bold; background: #f0f0f0;">
+                <td>TOTAL</td>
+                <td class="${totalJsTime < totalWasmTime ? 'faster' : 'slower'}">${totalJsTime.toFixed(2)}</td>
+                <td class="${totalWasmTime < totalJsTime ? 'faster' : 'slower'}">${totalWasmTime.toFixed(2)}</td>
+                <td>${totalDiff > 0 ? '+' : ''}${totalDiff}%</td>
+                <td>${totalWinner} (${totalSpeedup}x overall)</td>
+            </tr>`;
+
+            html += '</tbody></table>';
+            comparisonDiv.innerHTML = html;
+        }
+
+        window.clearResults = function() {
+            document.getElementById('benchmark-results').textContent = 'Not run yet';
+            document.getElementById('benchmark-results-wasm').textContent = 'Not run yet';
+            document.getElementById('comparison-table').textContent = 'Run benchmarks to see comparison';
+            document.getElementById('status').textContent = 'Click "Run Benchmarks" to start the performance tests';
+            window.jsResults = null;
+            window.wasmResults = null;
+        }
+    </script>
+</body>
+</html>
